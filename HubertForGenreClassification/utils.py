@@ -1,11 +1,10 @@
 import pandas as pd
 import torch
 
-from HubertForGenreClassification.AudioToGenreDataset import AudioToGenreDataset
+from AudioToGenreDataset import AudioToGenreDataset
 
 
 def get_device(force_cpu, status=True):
-    # Reference: from hw1
     if not force_cpu and torch.cuda.is_available():
         device = torch.device("cuda")
         if status:
@@ -36,11 +35,14 @@ def load_split_dataframe(data_split_filename: str):
         temp_labels = []
         for filename in split_data:
             # filename: pop/pop00048.png
-            filename_label_split = filename.split("/")
-            filename_split = filename_label_split[1].split(".")
+            filename_label_split = filename.split("/")      # Get genre
+            genre = filename_label_split[0]
 
-            temp_audio_filenames.append(filename_split[0])
-            temp_labels.append(filename_label_split[0])
+            filename_type_split = filename_label_split[1].split(".")    # For changing from png to wav
+            filename_id_split = filename_type_split[0].split(genre)
+
+            temp_audio_filenames.append(genre + "/" + genre + "." + filename_id_split[1] + ".wav")
+            temp_labels.append(genre)
 
         if split_name == "train":
             train_dataframe = pd.DataFrame({"audio_filename": temp_audio_filenames, "label": temp_labels})
