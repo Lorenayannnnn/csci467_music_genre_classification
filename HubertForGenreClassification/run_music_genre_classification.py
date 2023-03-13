@@ -1,8 +1,14 @@
 
 import argparse
+import os
 
+import torch
 from torch.utils.data import DataLoader
+from sklearn.metrics import accuracy_score
+import tqdm
+from transformers import AutoFeatureExtractor
 
+from HubertForGenreClassification import HubertForGenreClassification
 from utils import get_device, load_split_dataframe, create_dataset_w_dataframe
 
 
@@ -23,8 +29,156 @@ def setup_dataloader(args, feature_extractor):
     return train_loader, dev_loader, test_loader
 
 
+def setup_optimizer(args, model, device):
+    """
+    return:
+        - criterion: loss_fn
+        - optimizer: torch.optim
+    """
+    criterion = torch.nn.CrossEntropyLoss().to(device)
+    optimizer = torch.optim.Adam(params=model.parameters())
+    return criterion, optimizer
+
+def setup_model(args):
+    model = HubertForGenreClassification(args.model_name_or_path)
+    return model
+
+
+def train_epoch(
+    args,
+    model,
+    loader,
+    optimizer,
+    criterion,
+    device,
+    training=True,
+):
+    model.train()
+    epoch_loss = 0.0
+
+    # keep track of the model predictions for computing accuracy
+    pred_labels = []
+    target_labels = []
+
+    # iterate over each batch in the dataloader
+    # NOTE: you may have additional outputs from the loader __getitem__, you can modify this
+    for loaded_inputs in tqdm.tqdm(loader):
+        # put model inputs to device
+        inputs = loaded_inputs["input_values"][0]
+        labels = loaded_inputs["label"]
+
+        inputs, labels = inputs.to(device).float(), labels.to(device).long()
+
+        # calculate the loss and train accuracy and perform backprop
+        # NOTE: feel free to change the parameters to the model forward pass here + outputs
+        pred_logits = model(inputs).logits
+
+        # calculate prediction loss
+        loss = criterion(pred_logits.squeeze(), labels)
+
+        # step optimizer and compute gradients during training
+        if training:
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+        # logging
+        epoch_loss += loss.item()
+
+        # compute metrics
+        preds = pred_logits.argmax(-1)
+        pred_labels.extend(preds.cpu().numpy())
+        target_labels.extend(labels.cpu().numpy())
+
+    acc = accuracy_score(pred_labels, target_labels)
+    epoch_loss /= len(loader)
+
+    return epoch_loss, acc
+
+
+def validate(args, model, loader, optimizer, criterion, device):
+    # set model to eval mode
+    model.eval()
+
+    # don't compute gradients
+    with torch.no_grad():
+        val_loss, val_acc = train_epoch(
+            args,
+            model,
+            loader,
+            optimizer,
+            criterion,
+            device,
+            training=False,
+        )
+
+    return val_loss, val_acc
+
+
 def main(args):
     device = get_device(args.force_cpu)
+
+    # Load feature extractor
+    feature_extractor = AutoFeatureExtractor.from_pretrained(args.model_name_or_path)
+
+    # get dataloaders
+    train_loader, dev_loader, test_loader = setup_dataloader(args, feature_extractor)
+    loaders = {"train": train_loader, "dev": dev_loader, "test": test_loader}
+
+    # build model
+    model = setup_model(args)
+    print(model)
+
+    # get optimizer
+    criterion, optimizer = setup_optimizer(args, model, device)
+
+    all_train_acc = []
+    all_train_loss = []
+    all_val_acc = []
+    all_val_loss = []
+
+    best_val_acc = 0
+
+    for epoch in range(args.num_epochs):
+        # train model for a single epoch
+        print(f"Epoch {epoch}")
+        train_loss, train_acc = train_epoch(
+            args,
+            model,
+            loaders["train"],
+            optimizer,
+            criterion,
+            device,
+        )
+
+        print(f"train loss : {train_loss} | train acc: {train_acc}")
+        all_train_acc.append(train_acc)
+        all_train_loss.append(train_loss)
+
+        if epoch % args.val_every == 0:
+            val_loss, val_acc = validate(
+                args,
+                model,
+                loaders["val"],
+                optimizer,
+                criterion,
+                device,
+            )
+            print(f"val loss : {val_loss} | val acc: {val_acc}")
+            all_val_acc.append(val_acc)
+            all_val_loss.append(val_loss)
+
+            if epoch != 0 and best_val_acc > val_acc:
+                best_val_acc = val_acc
+                ckpt_file = os.path.join(args.outputs_dir, "model.ckpt")
+                print("saving model to ", ckpt_file)
+                torch.save(model, ckpt_file)
+
+    # Output training and validation accuracy and loss graphs
+    # utils.output_result_figure(args, "output_graphs/training_loss.png", all_train_loss, "Training Loss", False)
+    # utils.output_result_figure(args, "output_graphs/training_acc.png", all_train_acc, "Training Accuracy", False)
+    # utils.output_result_figure(args, "output_graphs/validation_loss.png", all_val_loss, "Validation Loss", True)
+    # utils.output_result_figure(args, "output_graphs/validation_acc.png", all_val_acc, "Validation Accuracy", True)
 
 
 
@@ -42,18 +196,18 @@ if __name__ == "__main__":
     parser.add_argument(
         "--num_epochs", default=30, type=int, help="number of training epochs"
     )
-    parser.add_argument(
-        "--val_every",
-        default=5,
-        type=int,
-        help="number of epochs between every eval loop",
-    )
-    parser.add_argument(
-        "--save_every",
-        default=5,
-        type=int,
-        help="number of epochs between saving model checkpoint",
-    )
+    # parser.add_argument(
+    #     "--val_every",
+    #     default=5,
+    #     type=int,
+    #     help="number of epochs between every eval loop",
+    # )
+    # parser.add_argument(
+    #     "--save_every",
+    #     default=5,
+    #     type=int,
+    #     help="number of epochs between saving model checkpoint",
+    # )
 
     parser.add_argument(
         "--model_name_or_path",
