@@ -43,13 +43,13 @@ class AudioToGenreDataset(Dataset):
         processed_audio_data = convert_audio_to_float_input_values(audio_file_name)
 
         inputs = self.feature_extractor(processed_audio_data, sampling_rate=self.feature_extractor.sampling_rate,
-                                        max_length=self.max_length, truncation=True)
+                                        max_length=self.max_length, truncation=True,)
 
         inputs["label"] = torch.tensor(label, dtype=torch.long)
-
         return inputs
 
 
+# Reference: https://stackoverflow.com/questions/33682490/how-to-read-a-wav-file-using-scipy-at-a-different-sampling-rate
 def convert_audio_to_float_input_values(audio_file_name: str):
     """
     Read input audio file and convert the file into the required sample rate
