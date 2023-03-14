@@ -17,9 +17,9 @@ def setup_dataloader(args, feature_extractor):
     train_dataframe, dev_dataframe, test_dataframe = load_split_dataframe(args.data_split_txt_filepath)
 
     # Create dataset
-    train_dataset = create_dataset_w_dataframe(train_dataframe, args.data_dir, feature_extractor, args.max_length)
-    dev_dataset = create_dataset_w_dataframe(dev_dataframe, args.data_dir, feature_extractor, args.max_length)
-    test_dataset = create_dataset_w_dataframe(test_dataframe, args.data_dir, feature_extractor, args.max_length)
+    train_dataset = create_dataset_w_dataframe(train_dataframe, args.data_dir, feature_extractor, args.sample_rate)
+    dev_dataset = create_dataset_w_dataframe(dev_dataframe, args.data_dir, feature_extractor, args.sample_rate)
+    test_dataset = create_dataset_w_dataframe(test_dataframe, args.data_dir, feature_extractor, args.sample_rate)
 
     # Create dataloader
     train_loader = DataLoader(train_dataset, shuffle=True, batch_size=args.batch_size)
@@ -71,7 +71,7 @@ def train_epoch(
 
         # calculate the loss and train accuracy and perform backprop
         # NOTE: feel free to change the parameters to the model forward pass here + outputs
-        pred_logits = model(inputs).logits
+        pred_logits = model(inputs)
 
         # calculate prediction loss
         loss = criterion(pred_logits.squeeze(), labels)
@@ -121,9 +121,9 @@ def main(args):
     # Load feature extractor
     feature_extractor = AutoFeatureExtractor.from_pretrained(args.model_name_or_path)
 
-    # get dataloaders
+    # get data loaders
     train_loader, dev_loader, test_loader = setup_dataloader(args, feature_extractor)
-    loaders = {"train": train_loader, "dev": dev_loader, "test": test_loader}
+    loaders = {"train": train_loader, "val": dev_loader, "test": test_loader}
 
     # build model
     model = setup_model(args)
@@ -168,7 +168,7 @@ def main(args):
             all_val_acc.append(val_acc)
             all_val_loss.append(val_loss)
 
-            if epoch != 0 and best_val_acc > val_acc:
+            if val_acc > best_val_acc:
                 best_val_acc = val_acc
                 ckpt_file = os.path.join(args.outputs_dir, "model.ckpt")
                 print("saving model to ", ckpt_file)
@@ -196,12 +196,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--num_epochs", default=30, type=int, help="number of training epochs"
     )
-    # parser.add_argument(
-    #     "--val_every",
-    #     default=5,
-    #     type=int,
-    #     help="number of epochs between every eval loop",
-    # )
+    parser.add_argument(
+        "--val_every",
+        default=2,
+        type=int,
+        help="number of epochs between every eval loop",
+    )
     # parser.add_argument(
     #     "--save_every",
     #     default=5,
@@ -217,7 +217,7 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        "--max_length",
+        "--sample_rate",
         default=16000,
         type=int,
         help="max length for processing audio",

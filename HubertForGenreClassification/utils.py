@@ -55,10 +55,10 @@ def load_split_dataframe(data_split_filename: str):
     return train_dataframe, dev_dataframe, test_dataframe
 
 
-def create_dataset_w_dataframe(dataframe, root_dir: str, feature_extractor, max_length):
+def create_dataset_w_dataframe(dataframe, root_dir: str, feature_extractor, sample_rate: int):
     return AudioToGenreDataset(
         root_dir=root_dir,
         dataframe=dataframe,
         feature_extractor=feature_extractor,
-        max_length=max_length
+        sample_rate=sample_rate
     )
