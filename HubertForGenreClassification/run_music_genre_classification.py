@@ -1,6 +1,7 @@
 
 import argparse
 import os
+from pathlib import Path
 
 import torch
 from torch.utils.data import DataLoader
@@ -8,7 +9,7 @@ from sklearn.metrics import accuracy_score
 import tqdm
 from transformers import AutoFeatureExtractor
 
-from HubertForGenreClassification import HubertForGenreClassification
+from MusicGenreClassificationModel import HubertForGenreClassification
 from utils import get_device, load_split_dataframe, create_dataset_w_dataframe
 
 
@@ -53,7 +54,10 @@ def train_epoch(
     device,
     training=True,
 ):
-    model.train()
+    if training:
+        model.train()
+    else:
+        model.eval()
     epoch_loss = 0.0
 
     # keep track of the model predictions for computing accuracy
@@ -126,7 +130,7 @@ def main(args):
     loaders = {"train": train_loader, "val": dev_loader, "test": test_loader}
 
     # build model
-    model = setup_model(args)
+    model = setup_model(args).to(device)
     print(model)
 
     # get optimizer
@@ -138,52 +142,82 @@ def main(args):
     all_val_loss = []
 
     best_val_acc = 0
+    best_val_epoch = -1
 
-    for epoch in range(args.num_epochs):
-        # train model for a single epoch
-        print(f"Epoch {epoch}")
-        train_loss, train_acc = train_epoch(
-            args,
-            model,
-            loaders["train"],
-            optimizer,
-            criterion,
-            device,
-        )
-
-        print(f"train loss : {train_loss} | train acc: {train_acc}")
-        all_train_acc.append(train_acc)
-        all_train_loss.append(train_loss)
-
-        if epoch % args.val_every == 0:
-            val_loss, val_acc = validate(
+    if args.do_train:
+        for epoch in range(args.num_epochs):
+            # train model for a single epoch
+            print(f"Epoch {epoch}")
+            train_loss, train_acc = train_epoch(
                 args,
                 model,
-                loaders["val"],
+                loaders["train"],
                 optimizer,
                 criterion,
                 device,
             )
-            print(f"val loss : {val_loss} | val acc: {val_acc}")
-            all_val_acc.append(val_acc)
-            all_val_loss.append(val_loss)
 
-            if val_acc > best_val_acc:
-                best_val_acc = val_acc
-                ckpt_file = os.path.join(args.outputs_dir, "model.ckpt")
-                print("saving model to ", ckpt_file)
-                torch.save(model, ckpt_file)
+            print(f"train loss : {train_loss} | train acc: {train_acc}")
+            all_train_acc.append(train_acc)
+            all_train_loss.append(train_loss)
 
-    # Output training and validation accuracy and loss graphs
-    # utils.output_result_figure(args, "output_graphs/training_loss.png", all_train_loss, "Training Loss", False)
-    # utils.output_result_figure(args, "output_graphs/training_acc.png", all_train_acc, "Training Accuracy", False)
-    # utils.output_result_figure(args, "output_graphs/validation_loss.png", all_val_loss, "Validation Loss", True)
-    # utils.output_result_figure(args, "output_graphs/validation_acc.png", all_val_acc, "Validation Accuracy", True)
+            if epoch % args.val_every == 0:
+                val_loss, val_acc = validate(
+                    args,
+                    model,
+                    loaders["val"],
+                    optimizer,
+                    criterion,
+                    device,
+                )
+                print(f"val loss : {val_loss} | val acc: {val_acc}")
+                all_val_acc.append(val_acc)
+                all_val_loss.append(val_loss)
 
+                if val_acc > best_val_acc:
+                    best_val_acc = val_acc
+                    best_val_epoch = epoch
+                    Path(args.outputs_dir).mkdir(parents=True, exist_ok=True)
+                    ckpt_model_file = os.path.join(args.outputs_dir, "model.ckpt")
+                    performance_file = os.path.join(args.outputs_dir, "results.txt")
+                    print("saving model to ", ckpt_model_file)
+                    torch.save(model, ckpt_model_file)
+                    open(performance_file, 'w').write(f"Best epoch: {best_val_epoch} | Accuracy: {best_val_acc}")
+    elif args.do_eval:
+        # Load pretrained model
+        model = torch.load(os.path.join(args.outputs_dir, "model.ckpt"))
+        val_loss, val_acc = validate(
+            args,
+            model,
+            loaders["val"],
+            optimizer,
+            criterion,
+            device,
+        )
+        print(f"val loss : {val_loss} | val acc: {val_acc}")
+
+    if args.do_test:
+        if not args.do_train:
+            # Load pretrained model
+            model = torch.load(os.path.join(args.outputs_dir, "model.ckpt"))
+        test_loss, test_acc = validate(
+            args,
+            model,
+            loaders["test"],
+            optimizer,
+            criterion,
+            device,
+        )
+        print(f"test loss : {test_loss} | test acc: {test_acc}")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+
+    parser.add_argument("--do_train", action="store_true", help="training mode")
+    parser.add_argument("--do_eval", action="store_true", help="training mode")
+    parser.add_argument("--do_test", action="store_true", help="training mode")
+
     parser.add_argument("--outputs_dir", type=str, default="output", help="where to save training outputs")
     parser.add_argument("--data_dir", type=str, help="where the music audio files are stored")
     parser.add_argument("--data_split_txt_filepath", type=str, default="../data_split.txt",
