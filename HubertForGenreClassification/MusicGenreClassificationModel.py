@@ -1,14 +1,14 @@
 import torch
 from torch import nn
-from transformers import HubertModel, HubertConfig
+from transformers import AutoModel, AutoConfig
 
 
-class HubertForGenreClassification(nn.Module):
+class MusicGenreClassificationModel(nn.Module):
 
     def __init__(self, model_name):
-        super(HubertForGenreClassification, self).__init__()
-        self.config = HubertConfig()
-        self.hubert_model = HubertModel(self.config)
+        super(MusicGenreClassificationModel, self).__init__()
+        self.config = AutoConfig.from_pretrained(model_name)
+        self.model = AutoModel.from_pretrained(model_name)
 
         self.projector = nn.Linear(in_features=self.config.hidden_size, out_features=int(self.config.hidden_size / 2))
         self.classifier = nn.Linear(in_features=int(self.config.hidden_size / 2), out_features=10)

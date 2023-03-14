@@ -9,7 +9,7 @@ from sklearn.metrics import accuracy_score
 import tqdm
 from transformers import AutoFeatureExtractor
 
-from MusicGenreClassificationModel import HubertForGenreClassification
+from MusicGenreClassificationModel import MusicGenreClassificationModel
 from utils import get_device, load_split_dataframe, create_dataset_w_dataframe
 
 
@@ -40,8 +40,9 @@ def setup_optimizer(args, model, device):
     optimizer = torch.optim.Adam(params=model.parameters())
     return criterion, optimizer
 
+
 def setup_model(args):
-    model = HubertForGenreClassification(args.model_name_or_path)
+    model = MusicGenreClassificationModel(args.model_name_or_path)
     return model
 
 
