@@ -1,6 +1,10 @@
 
+import os
+from pathlib import Path
+
 import pandas as pd
 import torch
+from pydub import AudioSegment
 
 from AudioToGenreDataset import AudioToGenreDataset
 
@@ -17,10 +21,12 @@ def get_device(force_cpu, status=True):
     return device
 
 
-def load_split_dataframe(data_split_filename: str):
+def load_split_dataframe(data_split_filename: str, data_dir: str):
     """
     Create dataframe for train, dev, test based on input data split file
-    :param data_split_filename:
+    :param data_split_filename (../data_split.txt)
+    :param data_dir (../data/genres_original/)
+
     :return: train_dataframe, dev_dataframe, test_dataframe
     """
     # Dataframe: {"audio_filename": [], "label": []}
@@ -38,12 +44,22 @@ def load_split_dataframe(data_split_filename: str):
             # filename: pop/pop00048.png
             filename_label_split = filename.split("/")      # Get genre
             genre = filename_label_split[0]
-
             filename_type_split = filename_label_split[1].split(".")    # For changing from png to wav
-            filename_id_split = filename_type_split[0].split(genre)
+            file_id = filename_type_split[0].split(genre)[1]
 
-            temp_audio_filenames.append(genre + "/" + genre + "." + filename_id_split[1] + ".wav")
-            temp_labels.append(genre)
+            # Split audio into segments for data augmentation
+            audio_segment_names = split_audio_file(
+                data_dir=data_dir,
+                genre=genre,
+                file_id=file_id,
+                original_filename=f"{genre}/{genre}.{file_id}.wav"
+            )
+
+            # temp_audio_filenames.append(genre + '/' + genre + '.' + file_id + ".wav")
+            # temp_labels.append(genre)
+
+            temp_audio_filenames.extend(audio_segment_names)
+            temp_labels.extend([genre] * len(audio_segment_names))
 
         if split_name == "train":
             train_dataframe = pd.DataFrame({"audio_filename": temp_audio_filenames, "label": temp_labels})
@@ -63,3 +79,49 @@ def create_dataset_w_dataframe(dataframe, root_dir: str, feature_extractor, samp
         feature_extractor=feature_extractor,
         sample_rate=sample_rate
     )
+
+
+def split_audio_file(data_dir: str, genre: str, file_id: str, original_filename: str):
+    """
+    Split input audio file into pieces of 3 seconds with 50%
+    :param data_dir: ../data/genres_original/
+    :param genre: pop
+    :param file_id (00048)
+    :param original_filename (pop/pop.00048.wav)
+
+    Usage:
+    audio_segments = split_audio_file(
+        data_dir="../data/genres_original/",
+        genre="pop",
+        file_id="00048",
+        original_filename="pop/pop.00048.wav"
+    )
+
+    :returns list of processed audio filenames (e.g.: split/pop/pop.00048.0.wav)
+    """
+    start = 0
+    end = 3
+    idx = 0
+
+    # Read in input audio file
+    original_audio = AudioSegment.from_wav(os.path.join(data_dir, original_filename))
+
+    audio_segments = []
+    # Each audio track is 30 seconds long
+    while end < 30:
+        segment = original_audio[(start * 1000):(end * 1000)]
+        segment_filename = f"split/{genre}/{genre}.{file_id}.{idx}.wav"
+
+        # Make dir if does not exist
+        Path(os.path.join(data_dir, f"split/{genre}/")).mkdir(parents=True, exist_ok=True)
+
+        # f = open(os.path.join(data_dir, segment_filename))
+        segment.export(os.path.join(data_dir, segment_filename), format="wav")
+        # f.close()
+
+        audio_segments.append(segment_filename)
+        start += 1.5
+        end += 1.5
+        idx += 1
+
+    return audio_segments

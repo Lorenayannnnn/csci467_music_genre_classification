@@ -15,7 +15,7 @@ from utils import get_device, load_split_dataframe, create_dataset_w_dataframe
 
 def setup_dataloader(args, feature_extractor):
     # Create dataframe based on input data split
-    train_dataframe, dev_dataframe, test_dataframe = load_split_dataframe(args.data_split_txt_filepath)
+    train_dataframe, dev_dataframe, test_dataframe = load_split_dataframe(args.data_split_txt_filepath, args.data_dir)
 
     # Create dataset
     train_dataset = create_dataset_w_dataframe(train_dataframe, args.data_dir, feature_extractor, args.sample_rate)
@@ -42,7 +42,12 @@ def setup_optimizer(args, model, device):
 
 
 def setup_model(args):
-    model = MusicGenreClassificationModel(args.model_name_or_path)
+    if ".ckpt" in args.model_name_or_path:
+        # Load pretrained model
+        print(f"Load pretrained model from {args.model_name_or_path}")
+        model = torch.load(args.model_name_or_path)
+    else:
+        model = MusicGenreClassificationModel(args.model_name_or_path, args.freeze_part)
     return model
 
 
@@ -124,7 +129,7 @@ def main(args):
     device = get_device(args.force_cpu)
 
     # Load feature extractor
-    feature_extractor = AutoFeatureExtractor.from_pretrained(args.model_name_or_path)
+    feature_extractor = AutoFeatureExtractor.from_pretrained(args.feature_extractor_name if ".ckpt" in args.model_name_or_path else args.model_name_or_path)
 
     # get data loaders
     train_loader, dev_loader, test_loader = setup_dataloader(args, feature_extractor)
@@ -176,6 +181,18 @@ def main(args):
                 all_val_loss.append(val_loss)
 
                 if val_acc > best_val_acc:
+                    # Run test
+
+                    test_loss, test_acc = validate(
+                        args,
+                        model,
+                        loaders["test"],
+                        optimizer,
+                        criterion,
+                        device,
+                    )
+                    print(f"test loss : {test_loss} | test acc: {test_acc}")
+
                     best_val_acc = val_acc
                     best_val_epoch = epoch
                     Path(args.outputs_dir).mkdir(parents=True, exist_ok=True)
@@ -183,7 +200,7 @@ def main(args):
                     performance_file = os.path.join(args.outputs_dir, "results.txt")
                     print("saving model to ", ckpt_model_file)
                     torch.save(model, ckpt_model_file)
-                    open(performance_file, 'w').write(f"Best epoch: {best_val_epoch} | Accuracy: {best_val_acc}")
+                    open(performance_file, 'w').write(f"Dev acccuracy: {best_val_acc} | Test accuracy: {test_acc}")
     elif args.do_eval:
         # Load pretrained model
         model = torch.load(os.path.join(args.outputs_dir, "model.ckpt"))
@@ -237,18 +254,19 @@ if __name__ == "__main__":
         type=int,
         help="number of epochs between every eval loop",
     )
-    # parser.add_argument(
-    #     "--save_every",
-    #     default=5,
-    #     type=int,
-    #     help="number of epochs between saving model checkpoint",
-    # )
 
     parser.add_argument(
         "--model_name_or_path",
-        default="facebook/hubert-base-ls960",
+        default="facebook/wav2vec2-base",
         type=str,
-        help=""
+        help="Path to local pretrained model or name of model from huggingface"
+    )
+
+    parser.add_argument(
+        "--feature_extractor_name",
+        default="facebook/wav2vec2-base",
+        type=str,
+        help="Name of feature extractor (load from huggingface)"
     )
 
     parser.add_argument(
@@ -256,6 +274,12 @@ if __name__ == "__main__":
         default=16000,
         type=int,
         help="max length for processing audio",
+    )
+
+    parser.add_argument(
+        "--freeze_part",
+        type=str,
+        help="freeze which part of the loaded pretrained model: ['full' (entire model), 'feature_extractor', 'none']",
     )
 
     args = parser.parse_args()
