@@ -7,22 +7,28 @@ import torch
 from torch.utils.data import DataLoader
 from sklearn.metrics import accuracy_score
 import tqdm
-from transformers import AutoFeatureExtractor
+from transformers import Wav2Vec2FeatureExtractor
 
 from MusicGenreClassificationModel import MusicGenreClassificationModel
 from utils import get_device, load_split_dataframe, create_dataset_w_dataframe
 
 
-def setup_dataloader(args, feature_extractor):
+def setup_dataloader(args, feature_extractor, device):
     # Create dataframe based on input data split
+    print("Creating dataframes")
     train_dataframe, dev_dataframe, test_dataframe = load_split_dataframe(args.data_split_txt_filepath, args.data_dir)
 
     # Create dataset
-    train_dataset = create_dataset_w_dataframe(train_dataframe, args.data_dir, feature_extractor, args.sample_rate)
-    dev_dataset = create_dataset_w_dataframe(dev_dataframe, args.data_dir, feature_extractor, args.sample_rate)
-    test_dataset = create_dataset_w_dataframe(test_dataframe, args.data_dir, feature_extractor, args.sample_rate)
+    print("Creating datasets")
+    train_dataset = create_dataset_w_dataframe(train_dataframe, args.data_dir, feature_extractor,
+                                               args.normalize_audio_arr, device)
+    dev_dataset = create_dataset_w_dataframe(dev_dataframe, args.data_dir, feature_extractor, args.normalize_audio_arr,
+                                             device)
+    test_dataset = create_dataset_w_dataframe(test_dataframe, args.data_dir, feature_extractor,
+                                              args.normalize_audio_arr, device)
 
     # Create dataloader
+    print("Setting up dataloader")
     train_loader = DataLoader(train_dataset, shuffle=True, batch_size=args.batch_size)
     dev_loader = DataLoader(dev_dataset, shuffle=True, batch_size=args.batch_size)
     test_loader = DataLoader(test_dataset, shuffle=True, batch_size=args.batch_size)
@@ -37,7 +43,7 @@ def setup_optimizer(args, model, device):
         - optimizer: torch.optim
     """
     criterion = torch.nn.CrossEntropyLoss().to(device)
-    optimizer = torch.optim.Adam(params=model.parameters())
+    optimizer = torch.optim.Adam(params=model.parameters(), lr=args.learning_rate)
     return criterion, optimizer
 
 
@@ -47,7 +53,8 @@ def setup_model(args):
         print(f"Load pretrained model from {args.model_name_or_path}")
         model = torch.load(args.model_name_or_path)
     else:
-        model = MusicGenreClassificationModel(args.model_name_or_path, args.freeze_part)
+        model = MusicGenreClassificationModel(args.model_name_or_path, args.freeze_part,
+                                              args.process_last_hidden_state_method)
     return model
 
 
@@ -129,10 +136,11 @@ def main(args):
     device = get_device(args.force_cpu)
 
     # Load feature extractor
-    feature_extractor = AutoFeatureExtractor.from_pretrained(args.feature_extractor_name if ".ckpt" in args.model_name_or_path else args.model_name_or_path)
+    feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(
+        args.feature_extractor_name if ".ckpt" in args.model_name_or_path else args.model_name_or_path)
 
     # get data loaders
-    train_loader, dev_loader, test_loader = setup_dataloader(args, feature_extractor)
+    train_loader, dev_loader, test_loader = setup_dataloader(args, feature_extractor, device)
     loaders = {"train": train_loader, "val": dev_loader, "test": test_loader}
 
     # build model
@@ -200,7 +208,8 @@ def main(args):
                     performance_file = os.path.join(args.outputs_dir, "results.txt")
                     print("saving model to ", ckpt_model_file)
                     torch.save(model, ckpt_model_file)
-                    open(performance_file, 'w').write(f"Dev acccuracy: {best_val_acc} | Test accuracy: {test_acc}")
+                    open(performance_file, 'w').write(
+                        f"Train acc: {train_acc} |Dev acccuracy: {best_val_acc} | Test accuracy: {test_acc}")
     elif args.do_eval:
         # Load pretrained model
         model = torch.load(os.path.join(args.outputs_dir, "model.ckpt"))
@@ -270,16 +279,28 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        "--sample_rate",
-        default=16000,
-        type=int,
-        help="max length for processing audio",
-    )
-
-    parser.add_argument(
         "--freeze_part",
         type=str,
         help="freeze which part of the loaded pretrained model: ['full' (entire model), 'feature_extractor', 'none']",
+    )
+
+    parser.add_argument(
+        "--process_last_hidden_state_method",
+        type=str,
+        help="Method for processing last hidden state output from Wav2Vec2 model. Should choose from [last, average, sum, max]"
+    )
+
+    parser.add_argument(
+        "--learning_rate",
+        type=float,
+        default=1e-3,
+        help="learning rate of optimizer"
+    )
+
+    parser.add_argument(
+        "--normalize_audio_arr",
+        action='store_true',
+        help="whether normalize audio array"
     )
 
     args = parser.parse_args()
