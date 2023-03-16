@@ -29,6 +29,7 @@ def load_split_dataframe(data_split_filename: str, data_dir: str):
 
     :return: train_dataframe, dev_dataframe, test_dataframe
     """
+    # TODO comment back
     # Dataframe: {"audio_filename": [], "label": []}
     train_dataframe = {}
     dev_dataframe = {}
@@ -69,15 +70,21 @@ def load_split_dataframe(data_split_filename: str, data_dir: str):
             test_dataframe = pd.DataFrame({"audio_filename": temp_audio_filenames, "label": temp_labels})
 
     f.close()
+
+    # train_dataframe = pd.read_pickle(os.path.join(data_dir, "train_dataframe.pkl"))
+    # dev_dataframe = pd.read_pickle(os.path.join(data_dir, "dev_dataframe.pkl"))
+    # test_dataframe = pd.read_pickle(os.path.join(data_dir, "test_dataframe.pkl"))
+
     return train_dataframe, dev_dataframe, test_dataframe
 
 
-def create_dataset_w_dataframe(dataframe, root_dir: str, feature_extractor, sample_rate: int):
+def create_dataset_w_dataframe(dataframe, root_dir: str, feature_extractor, normalize_audio_arr: bool, device):
     return AudioToGenreDataset(
         root_dir=root_dir,
         dataframe=dataframe,
         feature_extractor=feature_extractor,
-        sample_rate=sample_rate
+        normalize_audio_arr=normalize_audio_arr,
+        device=device
     )
 
 
@@ -125,3 +132,9 @@ def split_audio_file(data_dir: str, genre: str, file_id: str, original_filename:
         idx += 1
 
     return audio_segments
+
+
+def normalize_tensor(tensor_arr):
+    mean, std = torch.mean(tensor_arr), torch.std(tensor_arr)
+    normalized_arr = (tensor_arr - mean) / std
+    return normalized_arr
