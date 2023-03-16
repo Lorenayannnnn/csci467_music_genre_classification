@@ -9,7 +9,7 @@ from sklearn.metrics import accuracy_score
 import tqdm
 from transformers import Wav2Vec2FeatureExtractor
 
-from MusicGenreClassificationModel import MusicGenreClassificationModel
+from MusicGenreClassificationModel import MusicGenreClassificationModel, EnsembleMusicGenreClassificationModel
 from utils import get_device, load_split_dataframe, create_dataset_w_dataframe
 
 
@@ -35,26 +35,56 @@ def setup_dataloader(args, feature_extractor, device):
 
     return train_loader, dev_loader, test_loader
 
+def setup_criterion(args, device):
+    criterion = torch.nn.CrossEntropyLoss().to(device)
+    return criterion
 
-def setup_optimizer(args, model, device):
+
+def setup_optimizer(args, model):
     """
     return:
         - criterion: loss_fn
         - optimizer: torch.optim
     """
-    criterion = torch.nn.CrossEntropyLoss().to(device)
     optimizer = torch.optim.Adam(params=model.parameters(), lr=args.learning_rate)
-    return criterion, optimizer
+    return optimizer
 
 
-def setup_model(args):
+def setup_model(args, criterion):
     if ".ckpt" in args.model_name_or_path:
         # Load pretrained model
         print(f"Load pretrained model from {args.model_name_or_path}")
         model = torch.load(args.model_name_or_path)
+    elif args.do_ensemble:
+        biased_model = MusicGenreClassificationModel(
+            # TODO change biased model
+            model_name="facebook/wav2vec2-base",
+            # model_name=args.model_name_or_path,
+            freeze_part="none",
+            process_last_hidden_state_method=args.process_last_hidden_state_method,
+            freeze_layer_num=args.freeze_layer_num,
+            criterion=criterion
+        )
+        main_model = MusicGenreClassificationModel(
+            model_name=args.model_name_or_path,
+            freeze_part=args.freeze_part,
+            process_last_hidden_state_method=args.process_last_hidden_state_method,
+            freeze_layer_num=args.freeze_layer_num,
+            criterion=criterion
+        )
+        model = EnsembleMusicGenreClassificationModel(
+            biased_model=biased_model,
+            main_model=main_model,
+            ensemble_ratio=args.ensemble_ratio
+        )
     else:
-        model = MusicGenreClassificationModel(args.model_name_or_path, args.freeze_part,
-                                              args.process_last_hidden_state_method)
+        model = MusicGenreClassificationModel(
+            model_name=args.model_name_or_path,
+            freeze_part=args.freeze_part,
+            process_last_hidden_state_method=args.process_last_hidden_state_method,
+            freeze_layer_num=args.freeze_layer_num,
+            criterion=criterion
+        )
     return model
 
 
@@ -87,11 +117,9 @@ def train_epoch(
         inputs, labels = inputs.to(device).float(), labels.to(device).long()
 
         # calculate the loss and train accuracy and perform backprop
-        # NOTE: feel free to change the parameters to the model forward pass here + outputs
-        pred_logits = model(inputs)
-
-        # calculate prediction loss
-        loss = criterion(pred_logits.squeeze(), labels)
+        outputs = model(inputs, labels, do_train=training)
+        loss = outputs.loss
+        pred_logits = outputs.logits
 
         # step optimizer and compute gradients during training
         if training:
@@ -143,12 +171,14 @@ def main(args):
     train_loader, dev_loader, test_loader = setup_dataloader(args, feature_extractor, device)
     loaders = {"train": train_loader, "val": dev_loader, "test": test_loader}
 
+    criterion = setup_criterion(args, device)
+
     # build model
-    model = setup_model(args).to(device)
+    model = setup_model(args, criterion=criterion).to(device)
     print(model)
 
     # get optimizer
-    criterion, optimizer = setup_optimizer(args, model, device)
+    optimizer = setup_optimizer(args, model)
 
     all_train_acc = []
     all_train_loss = []
@@ -209,7 +239,7 @@ def main(args):
                     print("saving model to ", ckpt_model_file)
                     torch.save(model, ckpt_model_file)
                     open(performance_file, 'w').write(
-                        f"Train acc: {train_acc} |Dev acccuracy: {best_val_acc} | Test accuracy: {test_acc}")
+                        f"Train acc: {train_acc} | Dev acccuracy: {best_val_acc} | Test accuracy: {test_acc}")
     elif args.do_eval:
         # Load pretrained model
         model = torch.load(os.path.join(args.outputs_dir, "model.ckpt"))
@@ -270,7 +300,6 @@ if __name__ == "__main__":
         type=str,
         help="Path to local pretrained model or name of model from huggingface"
     )
-
     parser.add_argument(
         "--feature_extractor_name",
         default="facebook/wav2vec2-base",
@@ -279,28 +308,53 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
+        "--normalize_audio_arr",
+        action='store_true',
+        help="whether normalize audio array"
+    )
+    parser.add_argument(
         "--freeze_part",
         type=str,
-        help="freeze which part of the loaded pretrained model: ['full' (entire model), 'feature_extractor', 'none']",
+        help="freeze which part of the loaded pretrained model: "
+             "['full' (entire model), 'feature_extractor', 'none', 'freeze_encoder_layers']",
     )
-
     parser.add_argument(
         "--process_last_hidden_state_method",
         type=str,
         help="Method for processing last hidden state output from Wav2Vec2 model. Should choose from [last, average, sum, max]"
     )
-
     parser.add_argument(
         "--learning_rate",
         type=float,
         default=1e-3,
         help="learning rate of optimizer"
     )
+    parser.add_argument(
+        "--freeze_layer_num",
+        type=int,
+        default=12,
+        help="Number of encoder layers (start counting from the low level) that will be freezed. Default: freeeze the entire model"
+    )
 
     parser.add_argument(
-        "--normalize_audio_arr",
+        "--dropout_rate",
+        type=float,
+        default=0.1,
+        help="dropout rate of dropout layer"
+    )
+
+    # Ensemble learning
+    parser.add_argument(
+        "--do_ensemble",
         action='store_true',
-        help="whether normalize audio array"
+        help="Will create 2 models: 1 biased model without freezing any layers, and another main model created based on input arguments"
+    )
+
+    parser.add_argument(
+        "--ensemble_ratio",
+        type=float,
+        default=0.1,
+        help="percentage of biased prediction that will be included in the final result"
     )
 
     args = parser.parse_args()

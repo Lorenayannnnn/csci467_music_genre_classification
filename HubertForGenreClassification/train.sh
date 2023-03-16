@@ -1,26 +1,19 @@
-CUDA_VISIBLE_DEVICES=0 python3 run_music_genre_classification.py \
-  --outputs_dir ./outputs/wav2vec2-base-has-segments-freeze_feature_extractor/ \
+CUDA_VISIBLE_DEVICES=5 python3 run_music_genre_classification.py \
+  --outputs_dir ./outputs/freeze_bottom_10_encoder-lr_1e-5-dropout_0.1-ensemble_freeze_small_0.1/ \
   --do_train \
   --do_eval \
   --do_test \
   --data_dir ../data/genres_original/ \
   --data_split_txt_filepath ../data_split.txt \
-  --model_name_or_path facebook/wav2vec2-base \
+  --model_name_or_path facebook/wav2vec2-large-960h-lv60-self \
+  --process_last_hidden_state_method average \
+  --normalize_audio_arr \
   --batch_size 32 \
   --num_epochs 100 \
   --val_every 1 \
-  --freeze_part feature_extractor
-
-#CUDA_VISIBLE_DEVICES=3 python3 run_music_genre_classification.py \
-#  --outputs_dir ./outputs/hubert-base-ls960-18-segments/ \
-#  --do_train \
-#  --do_eval \
-#  --do_test \
-#  --data_dir ../data/genres_original/ \
-#  --data_split_txt_filepath ../data_split.txt \
-#  --feature_extractor_name facebook/hubert-base-ls960 \
-#  --model_name_or_path ./outputs/hubert-base-ls960-18-segments/model.ckpt \
-#  --batch_size 32 \
-#  --num_epochs 20 \
-#  --val_every 1
-
+  --learning_rate 1e-5 \
+  --dropout_rate 0.1 \
+  --freeze_part freeze_encoder_layers \
+  --freeze_layer_num 10 \
+  --do_ensemble \
+  --ensemble_ratio 0.1 \
