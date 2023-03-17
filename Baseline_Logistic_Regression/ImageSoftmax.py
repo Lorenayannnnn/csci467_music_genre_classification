@@ -365,9 +365,13 @@ def main():
     print('\nEvaluating final model:')
     train_acc = evaluate(model, trainArrX, trainArrY, 'Train')
     dev_acc = evaluate(model, devArrX, devArrY,  'Dev')
+    PATH = "./models/"
     if OPTS.test:
         test_acc = evaluate(model, testArrX, testArrY, 'Test')
+    torch.save(model.state_dict(), PATH + str(dev_acc)[2:6] + ".pt")
     
+
+
 if __name__ == '__main__':
     OPTS = parse_args()
     main()
