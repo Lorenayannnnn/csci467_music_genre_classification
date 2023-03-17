@@ -108,7 +108,6 @@ class EnsembleMusicGenreClassificationModel(nn.Module):
 
         loss = None
 
-
         if labels is not None:
             loss = self.bias_add_loss(
                 main_logits=main_logits,
