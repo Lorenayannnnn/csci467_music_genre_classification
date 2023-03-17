@@ -7,3 +7,4 @@ numpy~=1.24.2
 tqdm~=4.65.0
 scikit-learn~=1.2.2
 PIL~=9.4.0
+pydub~=0.25.1
