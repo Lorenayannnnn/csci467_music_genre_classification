@@ -18,3 +18,9 @@ or (without CUDA)
 python train.py
 ```
 assuming all necessary packages and dataset have been installed.
+
+Then run
+```
+python test.py
+```
+to test the model on the test set, where accuracy and confusion matrix are computed.
