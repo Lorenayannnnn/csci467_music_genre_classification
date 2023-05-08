@@ -1,6 +1,10 @@
 # csci467_music_genre_classification
 I LOVE ROBIN'S BUBBLY PERSONALITY & HEARTWARMING CHUCKLES
 
+# dataset
+We use GTZAN from kaggle. Please click the following link.
+[https://www.kaggle.com/datasets/andradaolteanu/gtzan-dataset-music-genre-classification](https://www.kaggle.com/datasets/andradaolteanu/gtzan-dataset-music-genre-classification)
+
 # CNN
 
 CNN_midterm and CNN_final folders contain training, testing, model, and some other files used for midterm and final report.
