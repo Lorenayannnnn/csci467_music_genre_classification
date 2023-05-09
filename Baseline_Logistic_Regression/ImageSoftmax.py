@@ -9,11 +9,11 @@ We will use this notation:
 """
 import argparse
 import copy
-import sys
+# import sys
 import time
-from tqdm import tqdm
+# from tqdm import tqdm
 
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.nn as nn
@@ -27,8 +27,8 @@ OPTS = None
 IMAGE_SHAPE = (218, 336)  # Size of MNIST images
 NUM_CLASSES = 10  # Number of classes we are classifying over
 #Note that NUMCOLS_PER_SECOND * HIDDEN_INPUT_DIM = 336
-NUMCOLS_PER_SECOND = 6
-HIDDEN_DIM = 56
+NUMCOLS_PER_SECOND = 3
+HIDDEN_DIM = 112
 
 #batch size = 32
 
@@ -292,7 +292,7 @@ def read_from_data():
 
 def main():
     # Set random seed, for reproducibility
-    torch.manual_seed(0)
+    torch.manual_seed(42)
 
     # Read the data
 
@@ -326,24 +326,81 @@ def main():
     
     #(700, 288, 432, 4)
     trainArrX = torch.tensor(np.stack(trainArrX))[:, 35:253, 54:390, :3].float()
+    # print(trainArrX[0])
+    meanArr = torch.tensor([[[trainArrX[:, i, j, k].mean() for k in range(trainArrX.shape[3])] for j in range(trainArrX.shape[2])] for i in range(trainArrX.shape[1])])
+    print("finished converting mean for train")
+    stdArr = torch.tensor([[[trainArrX[:, i, j, k].std() for k in range(trainArrX.shape[3])] for j in range(trainArrX.shape[2])] for i in range(trainArrX.shape[1])])
+    print("finished converting std and mean for train")
+    meanArr = torch.stack([meanArr for i in range(trainArrX.shape[0])])
+    stdArr = torch.stack([stdArr for i in range(trainArrX.shape[0])])
+
+    # print(meanArr.shape)
+    # print(stdArr.shape)
+    # print(trainArrX.shape)
+
+    trainArrX = torch.nan_to_num((trainArrX - meanArr)/stdArr)
+
+    # print(trainArrX.shape)
+    # print(trainArrX[0])
+    # print(meanArr.shape)
+
+    # testMean = trainArrX.flatten(start_dim = 1).mean(dim = 1)
+    # testVar = trainArrX.flatten(start_dim = 1).std(dim = 1)
+
+    # meanArr = torch.stack([testMean for i in range(trainArrX.shape[0])])
+    # varArr = torch.stack([testVar for i in range(trainArrX.shape[0])])
+    # print(meanArr.shape)
+    # print(testVar)
+    # print(trainArrX + testMean)
 
     #(700)
     trainArrY = torch.tensor(np.array(trainArrY))
 
     #(200, 288, 432, 4)
     devArrX = torch.tensor(np.stack(devArrX))[:, 35:253, 54:390, :3].float()
+    # print(trainArrX[0])
+    meanArr = torch.tensor([[[devArrX[:, i, j, k].mean() for k in range(devArrX.shape[3])] for j in range(devArrX.shape[2])] for i in range(devArrX.shape[1])])
+    print("finished converting mean for dev")
+    stdArr = torch.tensor([[[devArrX[:, i, j, k].std() for k in range(devArrX.shape[3])] for j in range(devArrX.shape[2])] for i in range(devArrX.shape[1])])
+    print("finished converting std and mean for dev")
+    meanArr = torch.stack([meanArr for i in range(devArrX.shape[0])])
+    stdArr = torch.stack([stdArr for i in range(devArrX.shape[0])])
+
+    # print(meanArr.shape)
+    # print(stdArr.shape)
+    # print(trainArrX.shape)
+
+    devArrX = torch.nan_to_num((devArrX - meanArr)/stdArr)
+
 
     #(200)
     devArrY = torch.tensor(np.array(devArrY))
 
     #(99, 288, 432, 4)
     testArrX = torch.tensor(np.stack(testArrX))[:, 35:253, 54:390, :3].float()
+    # print(trainArrX[0])
+    meanArr = torch.tensor([[[testArrX[:, i, j, k].mean() for k in range(testArrX.shape[3])] for j in range(testArrX.shape[2])] for i in range(testArrX.shape[1])])
+    print("finished converting mean for test")
+    stdArr = torch.tensor([[[testArrX[:, i, j, k].std() for k in range(testArrX.shape[3])] for j in range(testArrX.shape[2])] for i in range(testArrX.shape[1])])
+    print("finished converting std and mean for test")
+    meanArr = torch.stack([meanArr for i in range(testArrX.shape[0])])
+    stdArr = torch.stack([stdArr for i in range(testArrX.shape[0])])
+
+    # print(meanArr.shape)
+    # print(stdArr.shape)
+    # print(trainArrX.shape)
+
+    testArrX = torch.nan_to_num((testArrX - meanArr)/stdArr)
+
 
     #(99)
     testArrY = torch.tensor(np.array(testArrY))
 
 
     print("Finish Data Collection")
+
+    # print(len(devNames))
+    # print(devArrY)
 
             
 
@@ -365,10 +422,17 @@ def main():
     print('\nEvaluating final model:')
     train_acc = evaluate(model, trainArrX, trainArrY, 'Train')
     dev_acc = evaluate(model, devArrX, devArrY,  'Dev')
-    PATH = "./models/"
-    if OPTS.test:
-        test_acc = evaluate(model, testArrX, testArrY, 'Test')
-    torch.save(model.state_dict(), PATH + str(dev_acc)[2:6] + ".pt")
+    train_acc = evaluate(model, testArrX, testArrY, 'Test')
+
+    for i in range(10):
+        tempDevX = devArrX[20*i:20*(i+1)]
+        tempDevY = devArrY[20*i:20*(i+1)]
+        evaluate(model, tempDevX, tempDevY, labels[tempDevY[0]])
+
+    # PATH = "./models/"
+    # if OPTS.test:
+    #     test_acc = evaluate(model, testArrX, testArrY, 'Test')
+    # torch.save(model.state_dict(), PATH + str(dev_acc)[2:6] + ".pt")
     
 
 
