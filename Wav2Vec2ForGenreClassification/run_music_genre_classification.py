@@ -10,6 +10,7 @@ import tqdm
 from transformers import Wav2Vec2FeatureExtractor
 
 from MusicGenreClassificationModel import MusicGenreClassificationModel, EnsembleMusicGenreClassificationModel
+from AudioToGenreDataset import index_2_genre
 from utils import get_device, load_split_dataframe, create_dataset_w_dataframe
 
 
@@ -57,9 +58,7 @@ def setup_model(args, criterion):
         model = torch.load(args.model_name_or_path)
     elif args.do_ensemble:
         biased_model = MusicGenreClassificationModel(
-            # TODO change biased model
-            model_name="facebook/wav2vec2-base",
-            # model_name=args.model_name_or_path,
+            model_name=args.biased_model_name_or_path,
             freeze_part="none",
             process_last_hidden_state_method=args.process_last_hidden_state_method,
             freeze_layer_num=args.freeze_layer_num,
@@ -138,6 +137,20 @@ def train_epoch(
     acc = accuracy_score(pred_labels, target_labels)
     epoch_loss /= len(loader)
 
+    # Reference: https://stackoverflow.com/questions/39770376/scikit-learn-get-accuracy-scores-for-each-class
+    def report_classification_accuracy(pred_labels, true_labels):
+        from sklearn.metrics import confusion_matrix
+        cm = confusion_matrix(pred_labels, true_labels)
+
+        import numpy as np
+        cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+
+        acc_results = cm.diagonal()
+        for idx, class_name in enumerate(index_2_genre):
+            print(class_name, acc_results[idx])
+
+    report_classification_accuracy(pred_labels=pred_labels, true_labels=target_labels)
+
     return epoch_loss, acc
 
 
@@ -175,7 +188,7 @@ def main(args):
 
     # build model
     model = setup_model(args, criterion=criterion).to(device)
-    print(model)
+    # print(model)
 
     # get optimizer
     optimizer = setup_optimizer(args, model)
@@ -233,7 +246,7 @@ def main(args):
 
                     best_val_acc = val_acc
                     best_val_epoch = epoch
-                    Path(args.outputs_dir).mkdir(parents=True, exist_ok=True)
+                    Path(args.outputs_edir).mkdir(parents=True, exist_ok=True)
                     ckpt_model_file = os.path.join(args.outputs_dir, "model.ckpt")
                     performance_file = os.path.join(args.outputs_dir, "results.txt")
                     print("saving model to ", ckpt_model_file)
@@ -357,5 +370,13 @@ if __name__ == "__main__":
         help="percentage of biased prediction that will be included in the final result"
     )
 
+    parser.add_argument(
+        "--biased_model_name_or_path",
+        type=str,
+        default="facebook/wav2vec2-base",
+        help="percentage of biased prediction that will be included in the final result"
+    )
+
     args = parser.parse_args()
     main(args)
+
