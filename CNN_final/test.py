@@ -16,7 +16,7 @@ batch_size = 64
 num_classes = 10
 learning_rate = 0.0005
 num_epochs = 150
-root_dir = '../../Data/'
+root_dir = '../data/'
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 

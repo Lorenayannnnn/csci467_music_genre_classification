@@ -15,7 +15,7 @@ batch_size = 64
 num_classes = 10
 learning_rate = 0.0005
 num_epochs = 55
-root_dir = '../../Data/'
+root_dir = '../data/'
 experiment_name = 'final_model6'
 
 # use GPU to speed up training
