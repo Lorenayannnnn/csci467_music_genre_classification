@@ -3,6 +3,13 @@ I LOVE ROBIN'S BUBBLY PERSONALITY & HEARTWARMING CHUCKLES
 
 Authors: Lorena Yan, Tianhao Wu, Ryan Wang
 
+## Table of Content
+- [Clone the repo & install requirements](#clone-the-repo--install-requirements)
+- [Dataset Preparation](#dataset-preparation)
+- [Baseline](#baseline)
+- [CNN](#CNN)
+- [Wav2Vec-based Model](#wav2vec-based-model)
+
 ## Clone the repo & install requirements
 - Clone github repo:
     ```
@@ -37,8 +44,9 @@ Authors: Lorena Yan, Tianhao Wu, Ryan Wang
 ```
 
 ## Baseline
-To reproduce the results, run the following under the "Baseline_Logistics_Regression" directory (assuming lr = 0.001, 500 epochs, and batch size of 32). Add the --test flag to evaluate trained model on test set
+To reproduce the results, run the following under the go to [Baseline_Logistics_Regression](Baseline_Logistic_Regression) directory (assuming lr = 0.001, 500 epochs, and batch size of 32). Add the --test flag to evaluate trained model on test set
 ```
+cd Baseline_Logistics_Regression
 python ImageSoftmax.py  -r 0.001 -b 32 -T 500 --test
 ```
 
